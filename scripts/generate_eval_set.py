@@ -1,0 +1,568 @@
+"""
+Script to generate the Gold Evaluation Dataset (60 questions across FastAPI, Scikit-Learn, and MongoDB).
+Contains ground-truth source documents, reference answers, key concepts, and complexity labels.
+"""
+
+import json
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+EVAL_DIR = BASE_DIR / "data" / "eval"
+EVAL_DIR.mkdir(parents=True, exist_ok=True)
+
+EVAL_QUESTIONS = [
+    # ================= FASTAPI (20 Questions) =================
+    {
+        "id": "eval_fastapi_001",
+        "category": "FastAPI",
+        "question": "How do dependencies with yield work in FastAPI to manage resource cleanup?",
+        "source_doc": "fastapi_dependencies_with_yield_and_cleanup",
+        "reference_answer": "In FastAPI, dependencies declared with yield execute setup code prior to the path operation, yield the resource (such as a database session), and then execute the teardown code in the finally block after the HTTP response has been sent.",
+        "key_concepts": ["yield", "teardown", "finally", "cleanup", "resource"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_002",
+        "category": "FastAPI",
+        "question": "What is the difference between declaring path operations with async def versus regular def in FastAPI?",
+        "source_doc": "fastapi_concurrency_async_def_vs_def",
+        "reference_answer": "Path operations declared with async def run directly on the main asyncio event loop and must avoid blocking synchronous IO. Operations declared with standard def run in an external AnyIO worker threadpool, preventing blocking IO from freezing the server.",
+        "key_concepts": ["async def", "def", "event loop", "threadpool", "blocking"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_fastapi_003",
+        "category": "FastAPI",
+        "question": "How do you filter sensitive data like passwords from API responses in FastAPI?",
+        "source_doc": "fastapi_response_model_and_data_filtering",
+        "reference_answer": "Sensitive data is filtered by declaring a dedicated output Pydantic schema in the response_model parameter of the path operation decorator, which strips unlisted attributes like password hashes.",
+        "key_concepts": ["response_model", "filter", "password", "Pydantic", "schema"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_004",
+        "category": "FastAPI",
+        "question": "How do you handle binary file uploads without exhausting server memory in FastAPI?",
+        "source_doc": "fastapi_request_files_and_uploadfile",
+        "reference_answer": "Use UploadFile instead of raw bytes. UploadFile stores data in memory up to a threshold and then spools larger files to disk using a SpooledTemporaryFile with async read/write methods.",
+        "key_concepts": ["UploadFile", "memory", "SpooledTemporaryFile", "disk", "streaming"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_005",
+        "category": "FastAPI",
+        "question": "How do you configure CORS in FastAPI to allow frontend browser access?",
+        "source_doc": "fastapi_middleware_cors_configuration",
+        "reference_answer": "Add CORSMiddleware to the FastAPI application specifying allow_origins with authorized frontend domains, allow_credentials, allow_methods, and allow_headers.",
+        "key_concepts": ["CORSMiddleware", "allow_origins", "allow_credentials", "headers", "methods"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_006",
+        "category": "FastAPI",
+        "question": "How can you implement partial resource updates in FastAPI using Pydantic?",
+        "source_doc": "fastapi_body_updates_put_vs_patch",
+        "reference_answer": "Implement PATCH endpoints by defining an update schema with optional fields and calling model_dump(exclude_unset=True) so only explicitly provided values update the stored entity.",
+        "key_concepts": ["PATCH", "exclude_unset", "model_dump", "partial", "optional"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_fastapi_007",
+        "category": "FastAPI",
+        "question": "What is the recommended replacement for startup and shutdown event handlers in modern FastAPI?",
+        "source_doc": "fastapi_events_lifespan_handlers",
+        "reference_answer": "The recommended approach is using an asynccontextmanager lifespan handler passed to FastAPI(lifespan=...), where code before the yield executes on startup and code after yield executes on shutdown.",
+        "key_concepts": ["lifespan", "asynccontextmanager", "startup", "shutdown", "yield"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_008",
+        "category": "FastAPI",
+        "question": "How do you mock or substitute external services during unit tests in FastAPI?",
+        "source_doc": "fastapi_dependency_overrides_in_tests",
+        "reference_answer": "Use app.dependency_overrides dictionary to map existing dependency functions to mock callables during pytest execution, and clear it afterwards.",
+        "key_concepts": ["dependency_overrides", "mock", "test", "TestClient", "pytest"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_009",
+        "category": "FastAPI",
+        "question": "How do you schedule asynchronous jobs like sending emails after returning an HTTP response?",
+        "source_doc": "fastapi_background_tasks",
+        "reference_answer": "Inject BackgroundTasks into the route function parameter and call background_tasks.add_task(function_name, *args) to execute the task after sending the HTTP response.",
+        "key_concepts": ["BackgroundTasks", "add_task", "asynchronous", "response"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_010",
+        "category": "FastAPI",
+        "question": "How do you structure large multi-module FastAPI codebases cleanly?",
+        "source_doc": "fastapi_bigger_applications_apirouter",
+        "reference_answer": "Organize endpoints into APIRouter instances across separate modules, applying common prefixes, tags, and dependencies, and register them on the root app with app.include_router().",
+        "key_concepts": ["APIRouter", "include_router", "prefix", "modular", "tags"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_011",
+        "category": "FastAPI",
+        "question": "How do you stream LLM tokens or large responses to clients using FastAPI?",
+        "source_doc": "fastapi_streaming_responses_and_iterators",
+        "reference_answer": "Return a StreamingResponse with an async generator that yields encoded data chunks or tokens, setting the appropriate media_type.",
+        "key_concepts": ["StreamingResponse", "generator", "yield", "tokens", "stream"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_fastapi_012",
+        "category": "FastAPI",
+        "question": "How do you implement OAuth2 with Bearer tokens in FastAPI?",
+        "source_doc": "fastapi_security_first_steps_oauth2",
+        "reference_answer": "Use OAuth2PasswordBearer(tokenUrl='token') as a dependency with Depends to automatically extract and validate Bearer tokens from the Authorization header.",
+        "key_concepts": ["OAuth2PasswordBearer", "Bearer", "Authorization", "tokenUrl", "Depends"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_fastapi_013",
+        "category": "FastAPI",
+        "question": "How do you enforce role-based access control with security scopes in FastAPI?",
+        "source_doc": "fastapi_security_scopes_rbac",
+        "reference_answer": "Use Security(verify_permissions, scopes=['admin']) alongside SecurityScopes inside your dependency to inspect required permissions against token claims.",
+        "key_concepts": ["SecurityScopes", "Security", "scopes", "permissions", "RBAC"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_fastapi_014",
+        "category": "FastAPI",
+        "question": "How do you define application configuration using environment variables in FastAPI?",
+        "source_doc": "fastapi_settings_and_environment_variables_pydantic",
+        "reference_answer": "Define a Settings class inheriting from pydantic_settings.BaseSettings with SettingsConfigDict(env_file='.env'), cached via functools.lru_cache.",
+        "key_concepts": ["BaseSettings", "pydantic-settings", "env_file", "lru_cache", "config"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_015",
+        "category": "FastAPI",
+        "question": "How do you convert non-JSON serializable objects into JSON-compatible primitives in FastAPI?",
+        "source_doc": "fastapi_json_compatible_encoder",
+        "reference_answer": "Use the jsonable_encoder function provided by fastapi.encoders, which recursively converts datetimes, sets, and Pydantic models into native dicts and lists.",
+        "key_concepts": ["jsonable_encoder", "datetime", "serialize", "primitives", "Pydantic"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_016",
+        "category": "FastAPI",
+        "question": "How do you capture request processing latency using custom middleware in FastAPI?",
+        "source_doc": "fastapi_custom_middleware_timing_and_headers",
+        "reference_answer": "Register an @app.middleware('http') decorator, measure time with time.perf_counter() before and after calling call_next(request), and append the duration to the response headers.",
+        "key_concepts": ["middleware", "perf_counter", "call_next", "headers", "latency"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_017",
+        "category": "FastAPI",
+        "question": "How do you implement liveness and readiness health checks for Kubernetes in FastAPI?",
+        "source_doc": "fastapi_zero_downtime_deployment_healthchecks",
+        "reference_answer": "Create /healthz for basic liveness indicating the process is alive, and /ready for readiness which verifies dependent database and vectorstore connections before returning HTTP 200.",
+        "key_concepts": ["healthz", "ready", "liveness", "readiness", "Kubernetes"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_018",
+        "category": "FastAPI",
+        "question": "How do you run FastAPI in production with multi-core CPU workers?",
+        "source_doc": "fastapi_production_gunicorn_uvicorn_workers",
+        "reference_answer": "Run Gunicorn as a process manager with uvicorn.workers.UvicornWorker worker class, binding workers via (2 * CPU_CORES) + 1.",
+        "key_concepts": ["Gunicorn", "UvicornWorker", "workers", "concurrency", "production"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_019",
+        "category": "FastAPI",
+        "question": "How do you catch custom exceptions and return unified JSON error bodies in FastAPI?",
+        "source_doc": "fastapi_custom_exception_handlers",
+        "reference_answer": "Register custom exception classes using @app.exception_handler(CustomException) returning a Starlette JSONResponse with a standardized error schema.",
+        "key_concepts": ["exception_handler", "JSONResponse", "HTTPException", "errors"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_fastapi_020",
+        "category": "FastAPI",
+        "question": "How do you maintain persistent HTTP connection pools across route requests in FastAPI?",
+        "source_doc": "fastapi_async_httpx_client_in_dependencies",
+        "reference_answer": "Create a dependency that yields an httpx.AsyncClient instance within an async context manager or lifecycle hook to reuse TCP connections across requests.",
+        "key_concepts": ["httpx.AsyncClient", "connection pool", "Depends", "yield", "reuse"],
+        "difficulty": "complex"
+    },
+
+    # ================= SCIKIT-LEARN (20 Questions) =================
+    {
+        "id": "eval_sklearn_001",
+        "category": "Scikit-Learn",
+        "question": "How does Pipeline in scikit-learn prevent data leakage during cross-validation?",
+        "source_doc": "sklearn_pipeline_chaining_transformers_and_estimators",
+        "reference_answer": "Pipeline encapsulates preprocessing transformers and estimators so that transform parameters (such as mean and variance) are computed strictly on the training folds and applied to test folds without information leakage.",
+        "key_concepts": ["Pipeline", "leakage", "cross-validation", "transformers", "fit_transform"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_sklearn_002",
+        "category": "Scikit-Learn",
+        "question": "Why does HistGradientBoostingClassifier train significantly faster on large datasets than standard GradientBoostingClassifier?",
+        "source_doc": "sklearn_hist_gradient_boosting_fast_trees",
+        "reference_answer": "HistGradientBoostingClassifier discretizes continuous features into 256 integer bins (uint8), reducing split evaluation complexity from O(N log N) to O(K) and dramatically lowering memory bandwidth requirements.",
+        "key_concepts": ["HistGradientBoostingClassifier", "bins", "256", "histogram", "O(K)"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_sklearn_003",
+        "category": "Scikit-Learn",
+        "question": "What is the difference between L1 Lasso and L2 Ridge regularization in scikit-learn?",
+        "source_doc": "sklearn_lasso_regression_l1_feature_sparsity",
+        "reference_answer": "Lasso adds an L1 penalty (|w|) that forces uninformative feature coefficients to exact zero, performing automatic feature selection, whereas Ridge adds an L2 penalty (w^2) that shrinks coefficients asymptotically without zeroing them.",
+        "key_concepts": ["Lasso", "Ridge", "L1", "L2", "sparsity", "zero"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_sklearn_004",
+        "category": "Scikit-Learn",
+        "question": "How do you preprocess numerical and categorical columns with different transformers simultaneously?",
+        "source_doc": "sklearn_column_transformer_heterogeneous_data",
+        "reference_answer": "Use ColumnTransformer from sklearn.compose, specifying distinct transformer tuples for numerical columns (e.g. StandardScaler) and categorical columns (e.g. OneHotEncoder).",
+        "key_concepts": ["ColumnTransformer", "StandardScaler", "OneHotEncoder", "numerical", "categorical"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_005",
+        "category": "Scikit-Learn",
+        "question": "Why is RobustScaler preferred over StandardScaler when a dataset contains severe outliers?",
+        "source_doc": "sklearn_robust_scaler_outlier_handling",
+        "reference_answer": "RobustScaler centers data using the median and scales with the Interquartile Range (IQR = Q3 - Q1), both of which are robust to extreme outliers that distort mean and standard deviation.",
+        "key_concepts": ["RobustScaler", "median", "IQR", "outliers", "interquartile"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_006",
+        "category": "Scikit-Learn",
+        "question": "How does k-means++ initialization improve standard K-Means clustering in scikit-learn?",
+        "source_doc": "sklearn_k_means_clustering_and_k_means_plus_plus",
+        "reference_answer": "k-means++ seeds initial cluster centers proportionally to their squared distance from existing centers, spreading them far apart and avoiding suboptimal local minima traps.",
+        "key_concepts": ["k-means++", "KMeans", "centroids", "initialization", "distance"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_007",
+        "category": "Scikit-Learn",
+        "question": "Why must features be normalized before applying Principal Component Analysis (PCA)?",
+        "source_doc": "sklearn_principal_component_analysis_pca",
+        "reference_answer": "PCA maximizes variance along orthogonal axes. Without standardization, features with larger raw numeric ranges will dominate the principal components regardless of their true information content.",
+        "key_concepts": ["PCA", "StandardScaler", "variance", "scaling", "orthogonal"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_008",
+        "category": "Scikit-Learn",
+        "question": "How do you preserve class proportions when splitting imbalanced classification datasets?",
+        "source_doc": "sklearn_train_test_split_stratification",
+        "reference_answer": "Pass stratify=y into train_test_split() to ensure training and testing splits maintain identical class distribution percentages.",
+        "key_concepts": ["train_test_split", "stratify", "imbalanced", "proportions"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_009",
+        "category": "Scikit-Learn",
+        "question": "What is the primary difference between Pipeline and FeatureUnion in scikit-learn?",
+        "source_doc": "sklearn_feature_union_horizontal_concatenation",
+        "reference_answer": "Pipeline executes transformers in serial order where each step transforms the output of the previous step, while FeatureUnion executes transformers in parallel and concatenates their output feature vectors horizontally.",
+        "key_concepts": ["FeatureUnion", "Pipeline", "parallel", "concatenate", "horizontal"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_sklearn_010",
+        "category": "Scikit-Learn",
+        "question": "How does ElasticNet combine Ridge and Lasso regularization?",
+        "source_doc": "sklearn_elastic_net_l1_l2_blending",
+        "reference_answer": "ElasticNet linearly blends L1 and L2 penalties using an l1_ratio parameter, retaining Lasso's feature sparsity while grouping correlated variables like Ridge.",
+        "key_concepts": ["ElasticNet", "l1_ratio", "L1", "L2", "correlated"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_011",
+        "category": "Scikit-Learn",
+        "question": "Why is Joblib preferred over Python's built-in pickle for saving scikit-learn models?",
+        "source_doc": "sklearn_model_persistence_joblib_safetensors",
+        "reference_answer": "Joblib provides specialized optimizations for persisting large NumPy array buffers directly to disk, dramatically speeding up serialization and deserialization compared to standard pickle.",
+        "key_concepts": ["joblib", "pickle", "serialization", "NumPy", "dump"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_012",
+        "category": "Scikit-Learn",
+        "question": "How do you build a custom scikit-learn estimator compatible with GridSearchCV?",
+        "source_doc": "sklearn_custom_estimator_base_estimator_and_mixin",
+        "reference_answer": "Inherit from BaseEstimator and ClassifierMixin (or RegressorMixin), avoid *args and **kwargs in __init__, implement fit(X, y) returning self, and implement predict(X).",
+        "key_concepts": ["BaseEstimator", "ClassifierMixin", "fit", "predict", "get_params"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_sklearn_013",
+        "category": "Scikit-Learn",
+        "question": "How does TargetEncoder encode high-cardinality categorical features without overfitting?",
+        "source_doc": "sklearn_target_encoder_high_cardinality",
+        "reference_answer": "TargetEncoder replaces categories with target expectations smoothed toward the global mean, using internal cross-validation (cv=5) to prevent target leakage during training.",
+        "key_concepts": ["TargetEncoder", "cardinality", "shrinkage", "leakage", "smoothing"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_sklearn_014",
+        "category": "Scikit-Learn",
+        "question": "How does Random Forest reduce model variance compared to individual decision trees?",
+        "source_doc": "sklearn_random_forest_bagging_ensemble",
+        "reference_answer": "Random Forest combines bootstrap aggregation (bagging) with random feature subspace sampling at every split, de-correlating the individual trees so their averaged predictions exhibit lower variance.",
+        "key_concepts": ["Random Forest", "bagging", "bootstrap", "variance", "de-correlate"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_015",
+        "category": "Scikit-Learn",
+        "question": "What does the C hyperparameter control in LogisticRegression and Support Vector Machines?",
+        "source_doc": "sklearn_logistic_regression_multinomial_classification",
+        "reference_answer": "Parameter C is the inverse of regularization strength (1/alpha). Smaller values specify stronger regularization, penalizing large weights to prevent overfitting.",
+        "key_concepts": ["C", "inverse", "regularization", "overfitting", "penalty"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_016",
+        "category": "Scikit-Learn",
+        "question": "What does an Area Under the ROC Curve (ROC-AUC) score of 0.5 indicate?",
+        "source_doc": "sklearn_roc_auc_score_and_roc_curve",
+        "reference_answer": "A ROC-AUC score of 0.5 indicates that the model has no discriminative ability and performs identically to a random coin flip guess across classification thresholds.",
+        "key_concepts": ["ROC-AUC", "0.5", "random", "discriminative", "threshold"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_017",
+        "category": "Scikit-Learn",
+        "question": "What is the core difference between Precision and Recall?",
+        "source_doc": "sklearn_classification_metrics_precision_recall_f1",
+        "reference_answer": "Precision measures the proportion of positive predictions that were truly correct (TP / (TP + FP)), while Recall measures the proportion of actual positive cases successfully identified (TP / (TP + FN)).",
+        "key_concepts": ["Precision", "Recall", "TP", "FP", "FN"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_018",
+        "category": "Scikit-Learn",
+        "question": "What are the core naming conventions for learned attributes in scikit-learn estimators?",
+        "source_doc": "sklearn_estimator_and_transformer_api",
+        "reference_answer": "All parameters learned from training data end with a trailing underscore (such as coef_, intercept_, mean_, classes_), distinguishing them from user-configured hyperparameters.",
+        "key_concepts": ["underscore", "coef_", "trailing", "hyperparameters", "learned"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_019",
+        "category": "Scikit-Learn",
+        "question": "How does FunctionTransformer wrap custom mathematical operations into a pipeline?",
+        "source_doc": "sklearn_function_transformer_custom_logic",
+        "reference_answer": "FunctionTransformer wraps a stateless callable (like np.log1p) and optional inverse function (np.expm1) to provide scikit-learn fit/transform compliance.",
+        "key_concepts": ["FunctionTransformer", "stateless", "transform", "callable", "np.log1p"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_sklearn_020",
+        "category": "Scikit-Learn",
+        "question": "How do you handle severe class imbalance directly inside scikit-learn classifiers?",
+        "source_doc": "sklearn_class_weight_balanced_imbalanced_learning",
+        "reference_answer": "Set class_weight='balanced', which automatically adjusts misclassification loss penalties inversely proportional to class frequencies in the training data.",
+        "key_concepts": ["class_weight", "balanced", "imbalance", "frequencies", "penalty"],
+        "difficulty": "simple"
+    },
+
+    # ================= MONGODB (20 Questions) =================
+    {
+        "id": "eval_mongo_001",
+        "category": "MongoDB",
+        "question": "What is the ESR rule for designing high-performance compound indexes in MongoDB?",
+        "source_doc": "mongodb_compound_indexes_equality_sort_range_esr",
+        "reference_answer": "The ESR rule dictates ordering compound index fields: 1) Equality fields queried with exact matches first, 2) Sort fields next, and 3) Range filter fields last to avoid in-memory blocking sorts.",
+        "key_concepts": ["ESR", "Equality", "Sort", "Range", "compound index"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_002",
+        "category": "MongoDB",
+        "question": "What is the difference between ordered and unordered bulk write operations in MongoDB?",
+        "source_doc": "mongodb_insert_documents_insert_one_and_many",
+        "reference_answer": "With ordered: true (the default), execution halts at the first encountered error. With ordered: false, MongoDB continues processing subsequent write operations regardless of individual failures.",
+        "key_concepts": ["ordered", "unordered", "bulk", "insertMany", "halt"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_003",
+        "category": "MongoDB",
+        "question": "How do you automatically delete expired documents like login sessions in MongoDB?",
+        "source_doc": "mongodb_ttl_indexes_automatic_document_expiration",
+        "reference_answer": "Create a TTL (Time-To-Live) index on a BSON Date field specifying the expireAfterSeconds option, which a background mongod thread uses to automatically purge expired documents.",
+        "key_concepts": ["TTL", "expireAfterSeconds", "Date", "expiration", "background"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_004",
+        "category": "MongoDB",
+        "question": "What metrics in explain('executionStats') indicate that a MongoDB query is well-indexed?",
+        "source_doc": "mongodb_explain_execution_stats_query_optimization",
+        "reference_answer": "A query is well-indexed when stage displays IXSCAN (rather than COLLSCAN) and totalKeysExamined, totalDocsExamined, and nReturned are roughly equal.",
+        "key_concepts": ["explain", "executionStats", "IXSCAN", "COLLSCAN", "totalDocsExamined"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_005",
+        "category": "MongoDB",
+        "question": "How do you perform a relational left outer equijoin in MongoDB aggregation pipelines?",
+        "source_doc": "mongodb_aggregation_lookup_foreign_joins",
+        "reference_answer": "Use the $lookup pipeline stage specifying from (foreign collection), localField, foreignField, and as (target array field name).",
+        "key_concepts": ["$lookup", "join", "localField", "foreignField", "as"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_006",
+        "category": "MongoDB",
+        "question": "What write concern setting guarantees that writes are committed to disk journal across a replica set majority?",
+        "source_doc": "mongodb_write_concern_w_majority_and_journaling",
+        "reference_answer": "Specify writeConcern: { w: 'majority', j: true }, which confirms the write is acknowledged by a majority of voting members and persisted to the on-disk journal.",
+        "key_concepts": ["w: 'majority'", "j: true", "write concern", "journal", "durability"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_007",
+        "category": "MongoDB",
+        "question": "How do multi-document ACID transactions work in MongoDB with PyMongo?",
+        "source_doc": "mongodb_multi_document_acid_transactions",
+        "reference_answer": "Start a client session with client.start_session(), execute operations within session.start_transaction(), and pass session=session into all queries so that all writes commit or abort atomically.",
+        "key_concepts": ["start_session", "start_transaction", "ACID", "commit", "atomic"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_008",
+        "category": "MongoDB",
+        "question": "How do Change Streams enable event-driven architectures in MongoDB?",
+        "source_doc": "mongodb_change_streams_real_time_reactive_data",
+        "reference_answer": "Change Streams allow applications to subscribe to real-time data changes by watching collection.watch(), reading oplog events for inserts, updates, and deletes with resume token support.",
+        "key_concepts": ["Change Streams", "watch", "oplog", "real-time", "events"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_009",
+        "category": "MongoDB",
+        "question": "What is the role of an Arbiter node in a MongoDB replica set?",
+        "source_doc": "mongodb_replica_set_architecture_primary_secondary",
+        "reference_answer": "An arbiter participates in elections to break ties and achieve quorum during primary failover, but does not replicate or store any dataset documents.",
+        "key_concepts": ["Arbiter", "elections", "replica set", "quorum", "no data"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_010",
+        "category": "MongoDB",
+        "question": "Why should monotonically increasing fields (like timestamps or ObjectIds) be avoided as range shard keys?",
+        "source_doc": "mongodb_shard_key_selection_cardinality_frequency",
+        "reference_answer": "Monotonically increasing keys cause all new insert writes to concentrate exclusively on the single shard holding the maximum range, creating a severe write bottleneck.",
+        "key_concepts": ["monotonic", "hotspot", "shard key", "bottleneck", "range"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_011",
+        "category": "MongoDB",
+        "question": "What is the maximum size limit for a single BSON document in MongoDB?",
+        "source_doc": "mongodb_document_data_model_and_bson",
+        "reference_answer": "The maximum BSON document size is 16 megabytes. For larger files or data streams, MongoDB provides the GridFS specification.",
+        "key_concepts": ["16 megabytes", "16MB", "BSON", "GridFS", "limit"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_012",
+        "category": "MongoDB",
+        "question": "How does $elemMatch differ from standard array querying in MongoDB?",
+        "source_doc": "mongodb_array_query_operators_elemMatch_all",
+        "reference_answer": "$elemMatch requires that at least one single embedded document within an array satisfies all specified conditions simultaneously, whereas standard queries allow conditions to be met by different elements.",
+        "key_concepts": ["$elemMatch", "array", "simultaneously", "embedded", "condition"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_013",
+        "category": "MongoDB",
+        "question": "How do you deconstruct an array field into multiple output documents in aggregation?",
+        "source_doc": "mongodb_aggregation_unwind_array_flattening",
+        "reference_answer": "Use the $unwind pipeline stage, which outputs a separate document for each element in the specified array field.",
+        "key_concepts": ["$unwind", "array", "deconstruct", "flatten", "aggregation"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_014",
+        "category": "MongoDB",
+        "question": "What is the proper way to manage MongoClient connections in a Python web service?",
+        "source_doc": "mongodb_connection_pooling_and_pymongo_client",
+        "reference_answer": "Instantiate MongoClient once as a shared global singleton so it maintains an internal thread-safe socket pool, rather than creating a new client per request.",
+        "key_concepts": ["MongoClient", "singleton", "connection pool", "socket", "PyMongo"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_015",
+        "category": "MongoDB",
+        "question": "How do you perform atomic numerical increments on document fields in MongoDB?",
+        "source_doc": "mongodb_update_operators_set_unset_inc",
+        "reference_answer": "Use the $inc update operator (e.g. { $inc: { views: 1 } }) to atomically increment or decrement numbers in-place without race conditions.",
+        "key_concepts": ["$inc", "atomic", "increment", "update", "counter"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_016",
+        "category": "MongoDB",
+        "question": "What is the difference between embedding documents versus referencing them?",
+        "source_doc": "mongodb_data_modeling_embedding_vs_referencing",
+        "reference_answer": "Embedding stores sub-documents together inside a parent record for fast single-read queries (1:1 or 1:few), while referencing stores IDs linking separate collections for unbound 1:many growth and deduplication.",
+        "key_concepts": ["embedding", "referencing", "1:1", "1:many", "normalization"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_017",
+        "category": "MongoDB",
+        "question": "How do you add unique elements to an array field without duplicates in MongoDB?",
+        "source_doc": "mongodb_array_update_operators_push_pull_add_to_set",
+        "reference_answer": "Use the $addToSet update operator, which only appends values to the array if they do not already exist.",
+        "key_concepts": ["$addToSet", "array", "unique", "duplicate", "set"],
+        "difficulty": "simple"
+    },
+    {
+        "id": "eval_mongo_018",
+        "category": "MongoDB",
+        "question": "What does read concern linearizable guarantee in MongoDB?",
+        "source_doc": "mongodb_read_concern_local_majority_linearizable",
+        "reference_answer": "Read concern linearizable guarantees real-time serial reads by forcing the primary to communicate with a quorum of secondaries during the read to confirm it has not been partitioned off.",
+        "key_concepts": ["linearizable", "read concern", "real-time", "primary", "quorum"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_019",
+        "category": "MongoDB",
+        "question": "How does MongoDB Atlas Vector Search integrate with aggregation pipelines?",
+        "source_doc": "mongodb_atlas_vector_search_integration",
+        "reference_answer": "Atlas Vector Search uses the $vectorSearch aggregation stage with HNSW indexes, allowing approximate nearest neighbor search to be combined with standard scalar filters and pipeline stages.",
+        "key_concepts": ["$vectorSearch", "Atlas", "HNSW", "vector index", "aggregation"],
+        "difficulty": "complex"
+    },
+    {
+        "id": "eval_mongo_020",
+        "category": "MongoDB",
+        "question": "What is an upsert operation in MongoDB and when is it used?",
+        "source_doc": "mongodb_upsert_operations_and_idempotency",
+        "reference_answer": "An upsert (upsert: true) updates an existing document if one matches the query filter, or inserts a brand new document constructed from the query and update operators if no match is found.",
+        "key_concepts": ["upsert", "insert", "update", "idempotent", "match"],
+        "difficulty": "simple"
+    },
+]
+
+def main():
+    target_file = EVAL_DIR / "eval_dataset.json"
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(EVAL_QUESTIONS, f, indent=2)
+    print(f"Generated evaluation dataset with {len(EVAL_QUESTIONS)} questions -> {target_file}")
+
+if __name__ == "__main__":
+    main()
